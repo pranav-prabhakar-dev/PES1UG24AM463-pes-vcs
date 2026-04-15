@@ -197,8 +197,47 @@ int index_save(const Index *index) {
     return rename(tmp_path, INDEX_FILE);
 }
 
+// Stage a file: read contents, write blob, update index entry, save.
 int index_add(Index *index, const char *path) {
-    // TODO: Implement
-    (void)index; (void)path;
-    return -1;
+    // Read file contents
+    FILE *f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "error: cannot open '%s'\n", path); return -1; }
+
+    fseek(f, 0, SEEK_END);
+    long fsz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    size_t fsize = (fsz > 0) ? (size_t)fsz : 0;
+
+    void *contents = malloc(fsize + 1);
+    if (!contents) { fclose(f); return -1; }
+
+    if (fsize > 0 && fread(contents, 1, fsize, f) != fsize) {
+        fclose(f); free(contents); return -1;
+    }
+    fclose(f);
+
+    // Write contents as a blob object
+    ObjectID blob_id;
+    int rc = object_write(OBJ_BLOB, contents, fsize, &blob_id);
+    free(contents);
+    if (rc != 0) return -1;
+
+    // Collect metadata and update or insert index entry
+    struct stat st;
+    if (lstat(path, &st) != 0) return -1;
+    uint32_t mode = (st.st_mode & S_IXUSR) ? 0100755 : 0100644;
+
+    IndexEntry *e = index_find(index, path);
+    if (e) {
+        e->mode = mode; e->hash = blob_id;
+        e->mtime_sec = (uint64_t)st.st_mtime; e->size = (uint32_t)st.st_size;
+    } else {
+        if (index->count >= MAX_INDEX_ENTRIES) return -1;
+        e = &index->entries[index->count++];
+        e->mode = mode; e->hash = blob_id;
+        e->mtime_sec = (uint64_t)st.st_mtime; e->size = (uint32_t)st.st_size;
+        snprintf(e->path, sizeof(e->path), "%s", path);
+    }
+
+    return index_save(index);
 }
