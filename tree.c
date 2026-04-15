@@ -197,8 +197,43 @@ static int write_tree_level(RawEntry *entries, int count,
     return rc;
 }
 
+// Build a tree hierarchy from the current index and write all tree
+// objects to the object store.
+//
+// Reads .pes/index directly (format: "<mode-octal> <hex> <mtime> <size> <path>")
+// so that this translation unit stays independent of index.c — which is
+// important because test_tree does not link index.o.
+//
+// Returns 0 on success, -1 on error.
 int tree_from_index(ObjectID *id_out) {
-    // TODO: load index and call write_tree_level
-    (void)id_out;
-    return -1;
+    // Heap-allocate the entry array: 10000 * ~548 bytes ≈ 5 MB, too large for stack
+    RawEntry *entries = malloc(10000 * sizeof(RawEntry));
+    if (!entries) return -1;
+    int count = 0;
+
+    FILE *f = fopen(INDEX_FILE, "r");
+    if (f) {
+        uint32_t mode;
+        char hex[HASH_HEX_SIZE + 1];
+        unsigned long long mtime;
+        unsigned int size;
+        char path[512];
+
+        while (count < 10000 &&
+               fscanf(f, "%o %64s %llu %u %511s",
+                      &mode, hex, &mtime, &size, path) == 5) {
+            entries[count].mode = mode;
+            hex_to_hash(hex, &entries[count].hash);
+            strncpy(entries[count].path, path, sizeof(entries[count].path) - 1);
+            entries[count].path[sizeof(entries[count].path) - 1] = '\0';
+            count++;
+        }
+        fclose(f);
+    }
+
+    qsort(entries, count, sizeof(RawEntry), compare_raw_entries);
+
+    int rc = write_tree_level(entries, count, 0, id_out);
+    free(entries);
+    return rc;
 }
