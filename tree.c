@@ -116,22 +116,22 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 
 // ─── TODO: Implement these ──────────────────────────────────────────────────
 
-// Build a tree hierarchy from the current index and write all tree
-// objects to the object store.
-//
-// HINTS - Useful functions and concepts for this phase:
-//   - index_load      : load the staged files into memory
-//   - strchr          : find the first '/' in a path to separate directories from files
-//   - strncmp         : compare prefixes to group files belonging to the same subdirectory
-//   - Recursion       : you will likely want to create a recursive helper function 
-//                       (e.g., `write_tree_level(entries, count, depth)`) to handle nested dirs.
-//   - tree_serialize  : convert your populated Tree struct into a binary buffer
-//   - object_write    : save that binary buffer to the store as OBJ_TREE
-//
-// Returns 0 on success, -1 on error.
+// Forward declaration — object_write is implemented in object.c.
+// We declare it here so tree.c can call it without including a separate header,
+// which keeps test_tree (which does NOT link index.o) compilable.
+int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
+
+// Minimal per-entry struct for reading the index file directly.
+// We avoid including index.h so that test_tree links cleanly (index.c is
+// not part of the test_tree link target).
+typedef struct {
+    uint32_t mode;
+    ObjectID hash;
+    char path[512];
+} RawEntry;
+
 int tree_from_index(ObjectID *id_out) {
-    // TODO: Implement recursive tree building
-    // (See Lab Appendix for logical steps)
+    // TODO: implement recursive tree building
     (void)id_out;
     return -1;
 }
