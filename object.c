@@ -115,9 +115,19 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     full_obj[header_len] = '\0';
     memcpy(full_obj + header_len + 1, data, len);
 
-    // TODO: hash, deduplicate, and atomically store the object
+    // Step 2: Compute SHA-256 of the full object
+    ObjectID id;
+    compute_hash(full_obj, full_len, &id);
+
+    // Step 3: Deduplication — if already stored, nothing to do
+    if (object_exists(&id)) {
+        *id_out = id;
+        free(full_obj);
+        return 0;
+    }
+
+    // TODO: write atomically to object store
     free(full_obj);
-    (void)id_out;
     return -1;
 }
 
