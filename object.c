@@ -126,9 +126,56 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         return 0;
     }
 
-    // TODO: write atomically to object store
+    // Step 4: Create shard directory (.pes/objects/XX/)
+    char hex[HASH_HEX_SIZE + 1];
+    hash_to_hex(&id, hex);
+
+    char shard_dir[512];
+    snprintf(shard_dir, sizeof(shard_dir), "%s/%.2s", OBJECTS_DIR, hex);
+    mkdir(shard_dir, 0755);
+
+    // Step 5: Write to a temp file inside the shard directory
+    char final_path[512];
+    object_path(&id, final_path, sizeof(final_path));
+
+    char tmp_path[520];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", final_path);
+
+    int fd = open(tmp_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd < 0) {
+        free(full_obj);
+        return -1;
+    }
+
+    size_t written = 0;
+    while (written < full_len) {
+        ssize_t n = write(fd, (uint8_t *)full_obj + written, full_len - written);
+        if (n < 0) {
+            close(fd);
+            free(full_obj);
+            return -1;
+        }
+        written += (size_t)n;
+    }
     free(full_obj);
-    return -1;
+
+    // Step 6: fsync the temp file to flush to disk
+    fsync(fd);
+    close(fd);
+
+    // Step 7: Atomically rename temp file to final path
+    if (rename(tmp_path, final_path) != 0) return -1;
+
+    // Step 8: fsync the shard directory to persist the rename
+    int dir_fd = open(shard_dir, O_RDONLY);
+    if (dir_fd >= 0) {
+        fsync(dir_fd);
+        close(dir_fd);
+    }
+
+    // Step 9: Return the hash
+    *id_out = id;
+    return 0;
 }
 
 // Read an object from the store.
