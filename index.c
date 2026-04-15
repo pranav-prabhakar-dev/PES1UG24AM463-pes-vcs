@@ -131,10 +131,35 @@ int index_status(const Index *index) {
 // Forward declaration — implemented in object.c
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
 
+// Load the index from .pes/index.
+// Format per line: "<mode-octal> <64-hex> <mtime-sec> <size> <path>"
+// If the file doesn't exist, initialise an empty index — not an error.
 int index_load(Index *index) {
-    // TODO: Implement
-    (void)index;
-    return -1;
+    index->count = 0;
+
+    FILE *f = fopen(INDEX_FILE, "r");
+    if (!f) return 0;
+
+    while (index->count < MAX_INDEX_ENTRIES) {
+        IndexEntry *e = &index->entries[index->count];
+        char hex[HASH_HEX_SIZE + 1];
+        unsigned int mode_tmp, size_tmp;
+        unsigned long long mtime_tmp;
+
+        int ret = fscanf(f, "%o %64s %llu %u %511s",
+                         &mode_tmp, hex, &mtime_tmp, &size_tmp, e->path);
+        if (ret != 5) break;
+
+        e->mode      = (uint32_t)mode_tmp;
+        e->mtime_sec = (uint64_t)mtime_tmp;
+        e->size      = (uint32_t)size_tmp;
+
+        if (hex_to_hash(hex, &e->hash) != 0) { fclose(f); return -1; }
+        index->count++;
+    }
+
+    fclose(f);
+    return 0;
 }
 
 int index_save(const Index *index) {
