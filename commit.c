@@ -203,7 +203,16 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
         return -1;
     }
 
-    // TODO: resolve parent, fill metadata, serialize, write, update HEAD
+    // Step 2: Read current HEAD as parent (absent on the very first commit)
+    ObjectID parent_id;
+    if (head_read(&parent_id) == 0) {
+        c.parent     = parent_id;
+        c.has_parent = 1;
+    } else {
+        c.has_parent = 0;
+    }
+
+    // TODO: fill metadata, serialize, write object, update HEAD
     (void)message; (void)commit_id_out;
     return -1;
 }
