@@ -156,8 +156,36 @@ static int write_tree_level(RawEntry *entries, int count,
             te->name[sizeof(te->name) - 1] = '\0';
             i++;
         } else {
-            // TODO: handle subdirectory entries
-            i++;
+            // Has slash → belongs to a subdirectory; collect all siblings
+            int dir_len = (int)(slash - rel);
+            char dir_name[256];
+            strncpy(dir_name, rel, dir_len);
+            dir_name[dir_len] = '\0';
+
+            // Find the end of this directory's run
+            int j = i;
+            while (j < count) {
+                const char *r = entries[j].path + prefix_len;
+                char *s = strchr(r, '/');
+                if (!s) break;
+                if ((int)(s - r) != dir_len) break;
+                if (strncmp(r, dir_name, dir_len) != 0) break;
+                j++;
+            }
+
+            // Recurse: build the subtree for entries[i..j-1]
+            ObjectID sub_id;
+            if (write_tree_level(entries + i, j - i,
+                                 prefix_len + dir_len + 1, &sub_id) != 0)
+                return -1;
+
+            TreeEntry *te = &tree.entries[tree.count++];
+            te->mode = MODE_DIR;
+            te->hash = sub_id;
+            strncpy(te->name, dir_name, sizeof(te->name) - 1);
+            te->name[sizeof(te->name) - 1] = '\0';
+
+            i = j;
         }
     }
 
