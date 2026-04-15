@@ -212,7 +212,25 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
         c.has_parent = 0;
     }
 
-    // TODO: fill metadata, serialize, write object, update HEAD
-    (void)message; (void)commit_id_out;
-    return -1;
+    // Step 3: Fill author, timestamp, and commit message
+    snprintf(c.author,  sizeof(c.author),  "%s", pes_author());
+    snprintf(c.message, sizeof(c.message), "%s", message);
+    c.timestamp = (uint64_t)time(NULL);
+
+    // Step 4: Serialize the Commit struct into the text format
+    void *data;
+    size_t len;
+    if (commit_serialize(&c, &data, &len) != 0) return -1;
+
+    // Step 5: Write the serialized commit as an OBJ_COMMIT object
+    ObjectID commit_id;
+    int rc = object_write(OBJ_COMMIT, data, len, &commit_id);
+    free(data);
+    if (rc != 0) return -1;
+
+    // Step 6: Advance the branch pointer (HEAD) to the new commit
+    if (head_update(&commit_id) != 0) return -1;
+
+    *commit_id_out = commit_id;
+    return 0;
 }
