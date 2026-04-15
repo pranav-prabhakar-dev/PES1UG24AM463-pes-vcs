@@ -254,8 +254,31 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
         return -1;
     }
 
-    // TODO: integrity verification and data extraction
-    (void)type_out; (void)data_out; (void)len_out; (void)parsed_type;
+    // Step 4: Verify integrity — recompute hash and compare against requested id
+    ObjectID computed;
+    compute_hash(raw, (size_t)file_size, &computed);
+    if (memcmp(computed.hash, id->hash, HASH_SIZE) != 0) {
+        free(raw);
+        return -1;
+    }
+
+    // Step 5: Set type
+    *type_out = parsed_type;
+
+    // Step 6: Copy data portion (everything after the '\0') into a new buffer
+    uint8_t *data_start = null_byte + 1;
+    size_t data_len = (size_t)file_size - (size_t)(data_start - raw);
+
+    void *out = malloc(data_len);
+    if (!out) {
+        free(raw);
+        return -1;
+    }
+    memcpy(out, data_start, data_len);
+
+    *data_out = out;
+    *len_out = data_len;
+
     free(raw);
-    return -1;
+    return 0;
 }
