@@ -130,8 +130,47 @@ typedef struct {
     char path[512];
 } RawEntry;
 
+// Sort helper: entries must be in lexicographic path order so that directory
+// grouping in write_tree_level works correctly.
+static int compare_raw_entries(const void *a, const void *b) {
+    return strcmp(((const RawEntry *)a)->path, ((const RawEntry *)b)->path);
+}
+
+// Recursive helper: builds one level of the tree hierarchy and writes it.
+static int write_tree_level(RawEntry *entries, int count,
+                             int prefix_len, ObjectID *id_out) {
+    Tree tree;
+    tree.count = 0;
+
+    int i = 0;
+    while (i < count) {
+        const char *rel = entries[i].path + prefix_len;
+        char *slash = strchr(rel, '/');
+
+        if (!slash) {
+            // No slash → plain file at this level
+            TreeEntry *te = &tree.entries[tree.count++];
+            te->mode = entries[i].mode;
+            te->hash = entries[i].hash;
+            strncpy(te->name, rel, sizeof(te->name) - 1);
+            te->name[sizeof(te->name) - 1] = '\0';
+            i++;
+        } else {
+            // TODO: handle subdirectory entries
+            i++;
+        }
+    }
+
+    void *data;
+    size_t len;
+    if (tree_serialize(&tree, &data, &len) != 0) return -1;
+    int rc = object_write(OBJ_TREE, data, len, id_out);
+    free(data);
+    return rc;
+}
+
 int tree_from_index(ObjectID *id_out) {
-    // TODO: implement recursive tree building
+    // TODO: load index and call write_tree_level
     (void)id_out;
     return -1;
 }
